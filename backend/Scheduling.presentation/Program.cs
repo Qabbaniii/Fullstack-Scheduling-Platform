@@ -81,7 +81,10 @@ namespace Scheduling.presentation
                         ClockSkew = TimeSpan.Zero
                     };
                 });
-
+builder.Configuration
+    .AddJsonFile("appsettings.json", optional: false)
+    .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true)
+    .AddEnvironmentVariables();
             builder.Services.AddAuthorization(options =>
             {
                 options.AddPolicy("RequireProvider", policy => policy.RequireRole("Provider"));
