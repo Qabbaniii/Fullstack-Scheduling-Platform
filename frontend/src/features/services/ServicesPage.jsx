@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { API } from "../../api/client";
 import { useAuth } from "../../auth/useAuth";
 import { Btn } from "../../components/ui/Btn";
@@ -11,6 +11,40 @@ import { Modal } from "../../components/ui/Modal";
 import { fmt } from "../../utils/format";
 import { getAvailableDays } from "../../utils/bookingTime";
 import { TimeSlotPicker } from "./TimeSlotPicker";
+
+function getUtcTodayString() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function normalizeUtcDateOnly(value) {
+  if (!value) return "";
+  return String(value).slice(0, 10);
+}
+
+function formatLocalDateLabel(utcDateString) {
+  if (!utcDateString) return "";
+
+  const [year, month, day] = String(utcDateString).slice(0, 10).split("-");
+
+  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+
+  if (Number.isNaN(date.getTime())) {
+    return utcDateString;
+  }
+
+  const localYear = date.getFullYear();
+  const localMonth = String(date.getMonth() + 1).padStart(2, "0");
+  const localDay = String(date.getDate()).padStart(2, "0");
+
+  return `${localYear}-${localMonth}-${localDay}`;
+}
+
+function isActiveBookingStatus(status) {
+  if (status === null || status === undefined) return false;
+
+  const normalized = String(status).toLowerCase();
+  return normalized === "confirmed" || normalized === "pending";
+}
 
 function ServiceCard({ service, isProvider, onBook }) {
   return (
@@ -232,40 +266,109 @@ function CreateServiceModal({ open, onClose, onCreated, toast }) {
 
 function BookingModal({ open, onClose, service, toast, onBooked }) {
   const [availability, setAvailability] = useState([]);
+  const [bookedSlots, setBookedSlots] = useState([]);
   const [loadingAvailability, setLoadingAvailability] = useState(false);
+  const [loadingBookedSlots, setLoadingBookedSlots] = useState(false);
   const [loadingBooking, setLoadingBooking] = useState(false);
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedTime, setSelectedTime] = useState("");
 
   useEffect(() => {
+    let cancelled = false;
+
     async function loadAvailability() {
       if (!open || !service?.providerId) return;
 
       setLoadingAvailability(true);
+
       try {
         const data = await API.getProviderAvailability(service.providerId);
-        setAvailability(data);
+        if (cancelled) return;
 
-        const days = getAvailableDays(data);
+        const safeData = Array.isArray(data) ? data : [];
+        setAvailability(safeData);
+
+        const days = getAvailableDays(safeData).map(normalizeUtcDateOnly);
+        const utcToday = getUtcTodayString();
+
         if (days.length > 0) {
-          setSelectedDate(days[0]);
+          if (days.includes(utcToday)) {
+            setSelectedDate(utcToday);
+          } else {
+            setSelectedDate(days[0]);
+          }
+        } else {
+          setSelectedDate("");
         }
       } catch (err) {
+        if (cancelled) return;
         toast(err.message || "Failed to load availability", "error");
         setAvailability([]);
+        setSelectedDate("");
       } finally {
-        setLoadingAvailability(false);
+        if (!cancelled) {
+          setLoadingAvailability(false);
+        }
       }
     }
 
     loadAvailability();
-  }, [open, service, toast]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, service?.providerId, toast]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadBookedSlots() {
+      if (!open || !service?.providerId || !selectedDate) {
+        setBookedSlots([]);
+        return;
+      }
+
+      setLoadingBookedSlots(true);
+
+      try {
+        const data = await API.getProviderBookings(
+          service.providerId,
+          selectedDate,
+        );
+
+        if (cancelled) return;
+
+        const safeData = Array.isArray(data) ? data : [];
+
+        const activeBookings = safeData.filter((booking) =>
+          isActiveBookingStatus(booking?.status),
+        );
+
+        setBookedSlots(activeBookings);
+      } catch (err) {
+        if (cancelled) return;
+        toast(err.message || "Failed to load booked slots", "error");
+        setBookedSlots([]);
+      } finally {
+        if (!cancelled) {
+          setLoadingBookedSlots(false);
+        }
+      }
+    }
+
+    loadBookedSlots();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, service?.providerId, selectedDate, toast]);
 
   useEffect(() => {
     if (!open) {
       setSelectedDate("");
       setSelectedTime("");
       setAvailability([]);
+      setBookedSlots([]);
     }
   }, [open]);
 
@@ -273,7 +376,9 @@ function BookingModal({ open, onClose, service, toast, onBooked }) {
     setSelectedTime("");
   }, [selectedDate]);
 
-  const availableDays = getAvailableDays(availability);
+  const availableDays = useMemo(() => {
+    return getAvailableDays(availability).map(normalizeUtcDateOnly);
+  }, [availability]);
 
   const submitBooking = async () => {
     if (!selectedTime) {
@@ -282,6 +387,7 @@ function BookingModal({ open, onClose, service, toast, onBooked }) {
     }
 
     setLoadingBooking(true);
+
     try {
       await API.createBooking({
         serviceId: service.id,
@@ -289,7 +395,8 @@ function BookingModal({ open, onClose, service, toast, onBooked }) {
       });
 
       toast("Booking created successfully", "success");
-      onBooked();
+      onBooked?.();
+      onClose?.();
     } catch (err) {
       toast(err.message || "Booking failed", "error");
     } finally {
@@ -383,19 +490,26 @@ function BookingModal({ open, onClose, service, toast, onBooked }) {
               >
                 {availableDays.map((day) => (
                   <option key={day} value={day}>
-                    {day}
+                    {formatLocalDateLabel(day)}
                   </option>
                 ))}
               </select>
             </div>
 
-            <TimeSlotPicker
-              selectedDate={selectedDate}
-              selectedTime={selectedTime}
-              onSelectTime={setSelectedTime}
-              availability={availability}
-              durationMinutes={service.durationMinutes}
-            />
+            {loadingBookedSlots ? (
+              <div style={{ padding: 12, color: "var(--text3)" }}>
+                Loading booked slots...
+              </div>
+            ) : (
+              <TimeSlotPicker
+                selectedDate={selectedDate}
+                selectedTime={selectedTime}
+                onSelectTime={setSelectedTime}
+                availability={availability}
+                durationMinutes={service.durationMinutes}
+                bookedSlots={bookedSlots}
+              />
+            )}
           </>
         )}
 
@@ -439,7 +553,7 @@ export function ServicesPage({ toast }) {
 
     try {
       const data = await API.getServices(search);
-      setServices(data);
+      setServices(Array.isArray(data) ? data : []);
     } catch {
       toast("Failed to load services", "error");
     } finally {

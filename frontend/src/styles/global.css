@@ -87,7 +87,6 @@ a {
   text-decoration: none;
   color: inherit;
 }
-
 /* =========================
    SCROLLBAR
 ========================= */
@@ -103,7 +102,6 @@ a {
   background: var(--border2);
   border-radius: 3px;
 }
-
 /* =========================
    ANIMATIONS
 ========================= */
@@ -155,58 +153,6 @@ a {
     transform: translateX(0);
   }
 }
-
-/* =========================
-   UTILITY CLASSES
-========================= */
-.fade-in {
-  animation: fadeIn 0.35s ease both;
-}
-
-.slide-in {
-  animation: slideIn 0.3s ease both;
-}
-
-.text-muted {
-  color: var(--text3);
-}
-
-.text-soft {
-  color: var(--text2);
-}
-
-.text-accent {
-  color: var(--amber);
-}
-
-.bg-surface {
-  background: var(--surface);
-}
-
-.bg-surface-2 {
-  background: var(--surface2);
-}
-
-.border-default {
-  border: 1px solid var(--border);
-}
-
-.rounded {
-  border-radius: var(--radius);
-}
-
-.rounded-sm {
-  border-radius: var(--radius-sm);
-}
-
-.shadow {
-  box-shadow: var(--shadow);
-}
-
-.shadow-lg {
-  box-shadow: var(--shadow-lg);
-}
-
 /* =========================
    FORM HELPERS
 ========================= */

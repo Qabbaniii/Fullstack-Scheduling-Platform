@@ -1,10 +1,31 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { API } from "../../api/client";
 import { Btn } from "../../components/ui/Btn";
 import { Modal } from "../../components/ui/Modal";
 import { fmt } from "../../utils/format";
 import { getAvailableDays } from "../../utils/bookingTime";
 import { TimeSlotPicker } from "./TimeSlotPicker";
+
+function getUtcTodayString() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function normalizeUtcDateOnly(value) {
+  if (!value) return "";
+  return String(value).slice(0, 10);
+}
+
+function formatLocalDateLabel(utcDateString) {
+  if (!utcDateString) return "";
+
+  const date = new Date(`${utcDateString}T00:00:00.000Z`);
+
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
 
 export function BookingModal({ open, onClose, service, toast, onBooked }) {
   const [availability, setAvailability] = useState([]);
@@ -16,6 +37,8 @@ export function BookingModal({ open, onClose, service, toast, onBooked }) {
   const [selectedTime, setSelectedTime] = useState("");
 
   useEffect(() => {
+    let cancelled = false;
+
     async function loadAvailability() {
       if (!open || !service?.providerId) return;
 
@@ -23,31 +46,50 @@ export function BookingModal({ open, onClose, service, toast, onBooked }) {
 
       try {
         const data = await API.getProviderAvailability(service.providerId);
-        const safeData = Array.isArray(data) ? data : [];
+        if (cancelled) return;
 
+        const safeData = Array.isArray(data) ? data : [];
         setAvailability(safeData);
 
-        const days = getAvailableDays(safeData);
+        const days = getAvailableDays(safeData).map(normalizeUtcDateOnly);
+        const utcToday = getUtcTodayString();
+
         if (days.length > 0) {
-          setSelectedDate(days[0]);
+          if (days.includes(utcToday)) {
+            setSelectedDate(utcToday);
+          } else {
+            setSelectedDate(days[0]);
+          }
         } else {
           setSelectedDate("");
         }
       } catch (err) {
+        if (cancelled) return;
         toast(err.message || "Failed to load availability", "error");
         setAvailability([]);
         setSelectedDate("");
       } finally {
-        setLoadingAvailability(false);
+        if (!cancelled) {
+          setLoadingAvailability(false);
+        }
       }
     }
 
     loadAvailability();
-  }, [open, service, toast]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, service?.providerId, toast]);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function loadBookedSlots() {
-      if (!open || !service?.providerId || !selectedDate) return;
+      if (!open || !service?.providerId || !selectedDate) {
+        setBookedSlots([]);
+        return;
+      }
 
       setLoadingBookedSlots(true);
 
@@ -57,9 +99,7 @@ export function BookingModal({ open, onClose, service, toast, onBooked }) {
           selectedDate,
         );
 
-        console.log("providerId:", service.providerId);
-        console.log("selectedDate:", selectedDate);
-        console.log("API booked slots raw:", data);
+        if (cancelled) return;
 
         const safeData = Array.isArray(data) ? data : [];
 
@@ -68,24 +108,24 @@ export function BookingModal({ open, onClose, service, toast, onBooked }) {
           return status === "confirmed" || status === "pending";
         });
 
-        console.log("active booked slots:", activeBookings);
-
         setBookedSlots(activeBookings);
       } catch (err) {
-        console.error("loadBookedSlots error:", err);
+        if (cancelled) return;
         toast(err.message || "Failed to load booked slots", "error");
         setBookedSlots([]);
       } finally {
-        setLoadingBookedSlots(false);
+        if (!cancelled) {
+          setLoadingBookedSlots(false);
+        }
       }
     }
 
     loadBookedSlots();
-  }, [open, service, selectedDate, toast]);
 
-  useEffect(() => {
-    console.log("bookedSlots state changed:", bookedSlots);
-  }, [bookedSlots]);
+    return () => {
+      cancelled = true;
+    };
+  }, [open, service?.providerId, selectedDate, toast]);
 
   useEffect(() => {
     if (!open) {
@@ -100,7 +140,9 @@ export function BookingModal({ open, onClose, service, toast, onBooked }) {
     setSelectedTime("");
   }, [selectedDate]);
 
-  const availableDays = getAvailableDays(availability);
+  const availableDays = useMemo(() => {
+    return getAvailableDays(availability).map(normalizeUtcDateOnly);
+  }, [availability]);
 
   const submitBooking = async () => {
     if (!selectedTime) {
@@ -113,11 +155,12 @@ export function BookingModal({ open, onClose, service, toast, onBooked }) {
     try {
       await API.createBooking({
         serviceId: service.id,
-        startTime: selectedTime,
+        startTime: selectedTime, // UTC ISO string
       });
 
       toast("Booking created successfully", "success");
-      onBooked();
+      onBooked?.();
+      onClose?.();
     } catch (err) {
       toast(err.message || "Booking failed", "error");
     } finally {
@@ -215,7 +258,7 @@ export function BookingModal({ open, onClose, service, toast, onBooked }) {
               >
                 {availableDays.map((day) => (
                   <option key={day} value={day}>
-                    {day}
+                    {formatLocalDateLabel(day)}
                   </option>
                 ))}
               </select>

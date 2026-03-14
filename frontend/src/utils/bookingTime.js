@@ -1,39 +1,44 @@
-export function toUtcDateInputValue(date) {
-  const d = new Date(date);
+export function getAvailableDays(availability = []) {
+  const days = new Set();
 
-  const year = d.getUTCFullYear();
-  const month = `${d.getUTCMonth() + 1}`.padStart(2, "0");
-  const day = `${d.getUTCDate()}`.padStart(2, "0");
+  for (const slot of availability) {
+    if (!slot?.startTime || !slot?.endTime) continue;
 
-  return `${year}-${month}-${day}`;
+    const start = new Date(slot.startTime);
+    const end = new Date(slot.endTime);
+
+    const current = new Date(
+      start.getFullYear(),
+      start.getMonth(),
+      start.getDate(),
+    );
+
+    const last = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+
+    while (current <= last) {
+      const year = current.getFullYear();
+      const month = String(current.getMonth() + 1).padStart(2, "0");
+      const day = String(current.getDate()).padStart(2, "0");
+
+      days.add(`${year}-${month}-${day}`);
+      current.setDate(current.getDate() + 1);
+    }
+  }
+
+  return Array.from(days).sort();
 }
 
-export function formatTimeLabel(date) {
-  const d = new Date(date);
+export function generateTimeSlotsForDay(selectedDate, durationMinutes) {
+  if (!selectedDate || !durationMinutes) return [];
 
-  return d.toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: "UTC",
-  });
-}
-
-export function addMinutes(date, minutes) {
-  return new Date(new Date(date).getTime() + minutes * 60000);
-}
-
-export function generateTimeSlotsForDay(dateString, intervalMinutes) {
   const slots = [];
+  const startOfDay = new Date(`${selectedDate}T00:00:00`);
+  const endOfDay = new Date(`${selectedDate}T23:59:59`);
+  const current = new Date(startOfDay);
 
-  const start = new Date(`${dateString}T00:00:00Z`);
-  const end = new Date(`${dateString}T23:59:59Z`);
-
-  let current = new Date(start);
-
-  while (current <= end) {
+  while (current <= endOfDay) {
     slots.push(new Date(current));
-    current = addMinutes(current, intervalMinutes);
+    current.setMinutes(current.getMinutes() + durationMinutes);
   }
 
   return slots;
@@ -42,30 +47,23 @@ export function generateTimeSlotsForDay(dateString, intervalMinutes) {
 export function isSlotInsideAvailability(
   slotStart,
   durationMinutes,
-  availability,
+  availability = [],
 ) {
-  const slotEnd = addMinutes(slotStart, durationMinutes);
+  const slotEnd = new Date(slotStart.getTime() + durationMinutes * 60000);
 
-  return availability.some((window) => {
-    const windowStart = new Date(window.startTime);
-    const windowEnd = new Date(window.endTime);
+  return availability.some((range) => {
+    if (!range?.startTime || !range?.endTime) return false;
 
-    return slotStart >= windowStart && slotEnd <= windowEnd;
+    const rangeStart = new Date(range.startTime);
+    const rangeEnd = new Date(range.endTime);
+
+    return slotStart >= rangeStart && slotEnd <= rangeEnd;
   });
 }
 
-export function getAvailableDays(availability) {
-  const unique = new Set(
-    availability.map((a) => {
-      const d = new Date(a.startTime);
-
-      const year = d.getUTCFullYear();
-      const month = `${d.getUTCMonth() + 1}`.padStart(2, "0");
-      const day = `${d.getUTCDate()}`.padStart(2, "0");
-
-      return `${year}-${month}-${day}`;
-    }),
-  );
-
-  return Array.from(unique).sort();
+export function formatTimeLabel(value) {
+  const date = new Date(value);
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${hours}:${minutes}`;
 }
