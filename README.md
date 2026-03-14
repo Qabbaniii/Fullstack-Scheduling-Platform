@@ -1,4 +1,4 @@
-# Schedulr — Scheduling Platform
+# Scheduling Platform
 
 Schedulr is a full-stack scheduling platform that allows customers to book services with providers based on their availability.
 
