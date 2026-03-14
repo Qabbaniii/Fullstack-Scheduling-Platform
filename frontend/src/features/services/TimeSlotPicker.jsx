@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import {
+  formatTimeLabel,
   generateTimeSlotsForDay,
   isSlotInsideAvailability,
 } from "../../utils/bookingTime";
@@ -7,9 +8,9 @@ import {
 function toUtcMinuteKey(value) {
   if (!value) return "";
 
-  const d = new Date(value);
-
-  if (Number.isNaN(d.getTime())) return "";
+  const raw = String(value).trim();
+  const utcString = raw.endsWith("Z") ? raw : `${raw}Z`;
+  const d = new Date(utcString);
 
   const year = d.getUTCFullYear();
   const month = `${d.getUTCMonth() + 1}`.padStart(2, "0");
@@ -20,25 +21,15 @@ function toUtcMinuteKey(value) {
   return `${year}-${month}-${day}T${hour}:${minute}`;
 }
 
-function formatLocalTimeLabel(value) {
-  if (!value) return "";
-
-  const d = new Date(value);
-
-  if (Number.isNaN(d.getTime())) return "";
-
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  }).format(d);
-}
-
 function isActiveBookingStatus(status) {
   if (status === null || status === undefined) return false;
 
   const normalized = String(status).toLowerCase();
   return normalized === "confirmed" || normalized === "pending";
+}
+
+function useIsMobile(breakpoint = 768) {
+  return window.innerWidth <= breakpoint;
 }
 
 export function TimeSlotPicker({
@@ -49,14 +40,12 @@ export function TimeSlotPicker({
   durationMinutes,
   bookedSlots = [],
 }) {
+  const isMobile = useIsMobile();
+
   const bookedKeys = useMemo(() => {
     return bookedSlots
-      .filter((booking) => {
-        return (
-          booking && booking.startTime && isActiveBookingStatus(booking.status)
-        );
-      })
-      .map((booking) => toUtcMinuteKey(booking.startTime));
+      .filter((b) => b && b.startTime && isActiveBookingStatus(b.status))
+      .map((b) => toUtcMinuteKey(b.startTime));
   }, [bookedSlots]);
 
   const slots = useMemo(() => {
@@ -78,8 +67,8 @@ export function TimeSlotPicker({
         const booked = bookedKeys.includes(slotKey);
 
         return {
-          value: slotIso, // UTC ISO
-          label: formatLocalTimeLabel(slotIso), // Local time for UI
+          value: slotIso,
+          label: formatTimeLabel(slotIso),
           available,
           booked,
         };
@@ -135,8 +124,10 @@ export function TimeSlotPicker({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-          gap: 8,
+          gridTemplateColumns: isMobile
+            ? "repeat(6, minmax(0, 1fr))"
+            : "repeat(4, minmax(0, 1fr))",
+          gap: isMobile ? 6 : 8,
         }}
       >
         {slots.map((slot) => {
@@ -149,12 +140,10 @@ export function TimeSlotPicker({
               type="button"
               disabled={disabled}
               onClick={() => {
-                if (!disabled) {
-                  onSelectTime(slot.value);
-                }
+                if (!disabled) onSelectTime(slot.value);
               }}
               style={{
-                padding: "12px 8px",
+                padding: isMobile ? "9px 4px" : "12px 8px",
                 border: "1px solid var(--border)",
                 borderRadius: 0,
                 background: disabled
@@ -167,10 +156,11 @@ export function TimeSlotPicker({
                   : active
                     ? "#0e0f13"
                     : "#ffffff",
-                fontSize: 15,
+                fontSize: isMobile ? 12 : 15,
                 fontWeight: 700,
                 cursor: disabled ? "not-allowed" : "pointer",
                 opacity: disabled ? 0.8 : 1,
+                minHeight: isMobile ? 42 : 48,
               }}
               title={disabled ? "Already booked" : slot.label}
             >

@@ -49,12 +49,13 @@ namespace Scheduling.presentation
             {
                 options.AddPolicy("AllowFrontend", policy =>
                 {
-                    policy
-                        .WithOrigins("http://localhost:5174", "https://localhost:5174")
-                        .AllowAnyHeader()
-                        .AllowAnyMethod();
+                    policy.WithOrigins("https://fullstack-scheduling-platform.vercel.app")
+                          .AllowAnyHeader()
+                          .AllowAnyMethod();
                 });
             });
+
+ 
 
             #region JWT auth
             var jwtSection = builder.Configuration.GetSection("Jwt");
