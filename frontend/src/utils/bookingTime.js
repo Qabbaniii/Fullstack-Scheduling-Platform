@@ -61,9 +61,18 @@ export function isSlotInsideAvailability(
   });
 }
 
+// export function formatTimeLabel(value) {
+//   const date = new Date(value);
+//   const hours = String(date.getHours()).padStart(2, "0");
+//   const minutes = String(date.getMinutes()).padStart(2, "0");
+//   return `${hours}:${minutes}`;
+// }
 export function formatTimeLabel(value) {
   const date = new Date(value);
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  return `${hours}:${minutes}`;
+
+  return date.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
 }
